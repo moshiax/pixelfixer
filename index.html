@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>pixelfixer</title>
+<style>
+html, body {
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  background: black;
+  overflow: hidden;
+  user-select: none;
+  touch-action: none;
+}
+
+#fixer {
+  position: absolute;
+  top: 5vh;
+  left: 5vw;
+  width: 30vw;
+  height: 30vw;
+  border: 2px solid gray;
+  touch-action: none;
+}
+
+canvas {
+  width: 100%;
+  height: 100%;
+  display: block;
+  background: black;
+  touch-action: none;
+}
+
+#fullscreenBtn {
+  position: fixed;
+  right: 3vw;
+  bottom: 3vh;
+  background: rgba(255,255,255,0.1);
+  color: white;
+  border: 1px solid #888;
+  padding: 0.6em 1em;
+  font-size: 1em;
+  cursor: pointer;
+  z-index: 10;
+  border-radius: 0.3em;
+}
+
+</style>
+</head>
+<body>
+<div id="fixer"><canvas></canvas></div>
+<button id="fullscreenBtn" onclick="toggleFullscreen()">⛶</button>
+
+<script>
+const frame = document.getElementById('fixer');
+const canvas = frame.querySelector('canvas');
+const ctx = canvas.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+let startX, startY, startW, startH, startL, startT, mode;
+const edge = 8;
+
+function getXY(e) {
+  const t = e.touches ? e.touches[0] : e;
+  return { x: t.clientX, y: t.clientY };
+}
+
+function getAction(e) {
+  const { x, y } = getXY(e);
+  const r = frame.getBoundingClientRect();
+  const relX = x - r.left, relY = y - r.top;
+  const l = relX < edge, rgt = relX > r.width - edge;
+  const t = relY < edge, b = relY > r.height - edge;
+  return t && l ? 'nw' : t && rgt ? 'ne' : b && l ? 'sw' : b && rgt ? 'se'
+       : t ? 'n' : b ? 's' : l ? 'w' : rgt ? 'e' : 'move';
+}
+
+function beginInteraction(e) {
+  e.preventDefault();
+  mode = getAction(e);
+  const r = frame.getBoundingClientRect();
+  const { x, y } = getXY(e);
+  startX = x; startY = y;
+  startW = r.width; startH = r.height;
+  startL = r.left; startT = r.top;
+  window.addEventListener(e.type.startsWith('touch') ? 'touchmove' : 'mousemove', onMove, { passive: false });
+  window.addEventListener(e.type.startsWith('touch') ? 'touchend' : 'mouseup', onUp);
+}
+
+function onMove(e) {
+  e.preventDefault();
+  const { x, y } = getXY(e);
+  const dx = x - startX, dy = y - startY;
+  let l = startL, t = startT, w = startW, h = startH;
+
+  if (mode === 'move') {
+    frame.style.left = l + dx + 'px';
+    frame.style.top = t + dy + 'px';
+  } else {
+    if (mode.includes('n')) { h -= dy; t += dy; }
+    if (mode.includes('s')) h += dy;
+    if (mode.includes('w')) { w -= dx; l += dx; }
+    if (mode.includes('e')) w += dx;
+
+    if (w < 64) { l += w - 64; w = 64; }
+    if (h < 64) { t += h - 64; h = 64; }
+
+    frame.style.left = l + 'px';
+    frame.style.top = t + 'px';
+    frame.style.width = w + 'px';
+    frame.style.height = h + 'px';
+    resizeCanvas();
+  }
+}
+
+function onUp(e) {
+  window.removeEventListener(e.type.startsWith('touch') ? 'touchmove' : 'mousemove', onMove);
+  window.removeEventListener(e.type.startsWith('touch') ? 'touchend' : 'mouseup', onUp);
+  mode = null;
+}
+
+frame.addEventListener('mousedown', beginInteraction);
+frame.addEventListener('touchstart', beginInteraction, { passive: false });
+
+frame.addEventListener('mousemove', e => {
+  if (mode) return;
+  const c = {
+    n: 'ns-resize', s: 'ns-resize',
+    w: 'ew-resize', e: 'ew-resize',
+    nw: 'nwse-resize', se: 'nwse-resize',
+    ne: 'nesw-resize', sw: 'nesw-resize',
+    move: 'move'
+  };
+  frame.style.cursor = c[getAction(e)] || 'default';
+});
+
+function resizeCanvas() {
+  const w = frame.clientWidth;
+  const h = frame.clientHeight;
+  canvas.width = w;
+  canvas.height = h;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  draw();
+}
+
+function draw() {
+  const w = canvas.width, h = canvas.height;
+  const block = 64;
+  const img = ctx.createImageData(block, block);
+  for (let i = 0; i < block * block * 4; i += 4) {
+    img.data[i] = Math.random() < 0.5 ? 255 : 0;
+    img.data[i+1] = Math.random() < 0.5 ? 255 : 0;
+    img.data[i+2] = Math.random() < 0.5 ? 255 : 0;
+    img.data[i+3] = 255;
+  }
+
+  ctx.clearRect(0, 0, w, h);
+
+  for (let y = 0; y < h; y += block) {
+    for (let x = 0; x < w; x += block) {
+      ctx.putImageData(img, x, y);
+    }
+  }
+
+  setTimeout(draw, 10);
+}
+
+function toggleFullscreen() {
+  const el = document.documentElement;
+  if (!document.fullscreenElement) {
+    el.requestFullscreen?.() || el.webkitRequestFullscreen?.() || el.mozRequestFullScreen?.();
+  } else {
+    document.exitFullscreen?.() || document.webkitExitFullscreen?.() || document.mozCancelFullScreen?.();
+  }
+}
+
+document.addEventListener('keydown', e => {
+  if (e.code === 'KeyF') toggleFullscreen();
+  if (e.key === 'Escape' && document.fullscreenElement) toggleFullscreen();
+});
+
+resizeCanvas();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
