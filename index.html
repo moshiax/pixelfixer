@@ -58,11 +58,6 @@ const canvas = frame.querySelector('canvas');
 const ctx = canvas.getContext('2d');
 ctx.imageSmoothingEnabled = false;
 
-let scale = 1;
-let startDist = 0;
-let lastScale = 1;
-let isPinching = false;
-
 let startX, startY, startW, startH, startL, startT, mode;
 const edge = 8;
 
@@ -82,15 +77,6 @@ function getAction(e) {
 }
 
 function beginInteraction(e) {
-  if (e.touches && e.touches.length === 2) {
-    isPinching = true;
-    startDist = getDistance(e.touches[0], e.touches[1]);
-    lastScale = scale;
-    return;
-  }
-
-  if (e.touches && e.touches.length > 1) return;
-
   e.preventDefault();
   mode = getAction(e);
   const r = frame.getBoundingClientRect();
@@ -103,16 +89,6 @@ function beginInteraction(e) {
 }
 
 function onMove(e) {
-  if (isPinching && e.touches && e.touches.length === 2) {
-    const dist = getDistance(e.touches[0], e.touches[1]);
-    let newScale = lastScale * (dist / startDist);
-    newScale = Math.max(0.3, Math.min(5, newScale)); // ограничение масштаба
-
-    scale = newScale;
-    frame.style.transform = `scale(${scale})`;
-    return;
-  }
-
   e.preventDefault();
   const { x, y } = getXY(e);
   const dx = x - startX, dy = y - startY;
@@ -139,19 +115,9 @@ function onMove(e) {
 }
 
 function onUp(e) {
-  if (e.touches && e.touches.length > 0) return;
-  isPinching = false;
-  window.removeEventListener('touchmove', onMove);
-  window.removeEventListener('mousemove', onMove);
-  window.removeEventListener('touchend', onUp);
-  window.removeEventListener('mouseup', onUp);
+  window.removeEventListener(e.type.startsWith('touch') ? 'touchmove' : 'mousemove', onMove);
+  window.removeEventListener(e.type.startsWith('touch') ? 'touchend' : 'mouseup', onUp);
   mode = null;
-}
-
-function getDistance(p1, p2) {
-  const dx = p1.clientX - p2.clientX;
-  const dy = p1.clientY - p2.clientY;
-  return Math.sqrt(dx * dx + dy * dy);
 }
 
 frame.addEventListener('mousedown', beginInteraction);
@@ -191,9 +157,12 @@ function draw() {
   }
 
   ctx.clearRect(0, 0, w, h);
-  for (let y = 0; y < h; y += block)
-    for (let x = 0; x < w; x += block)
+
+  for (let y = 0; y < h; y += block) {
+    for (let x = 0; x < w; x += block) {
       ctx.putImageData(img, x, y);
+    }
+  }
 
   setTimeout(draw, 10);
 }
